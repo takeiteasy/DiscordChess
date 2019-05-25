@@ -62,29 +62,33 @@ end
 class User
   attr_accessor :id, :nick, :discr
 
-  def set id=nil, nick=nil, discriminator=nil
+  def set id
     case id
     when Fixnum, String
-      @id = id
-      if nick and discriminator
-        @nick  = nick
-        @discr = discriminator
+      u = nil
+      id = id.to_s
+      case id
+      when /^\d+$/
+        u = $bot.user id
+      when /^.*#\d+$/
+        b = id.rpartition '#'
+        u = $bot.find_user b.first, b.last
       else
-        self.update
+        raise "Invalid ID parameter passed to User"
       end
-    when Discordrb::Member, Discordrb::User
+      raise "Failed to set User" if not u
+      self.set u
+    when Discordrb::Member, Discordrb::User, Discordrb::Profile
       @id    = id.id
       @nick  = id.username
       @discr = id.discriminator
     else
-      @id    = nil
-      @nick  = nil 
-      @discr = nil 
+      raise "Invalid ID parameter passed to User"
     end
   end
 
-  def initialize id=nil, nick=nil, discriminator=nil
-    self.set id, nick, discriminator
+  def initialize id
+    self.set id
   end
 
   def to_s
@@ -101,22 +105,6 @@ class User
 
   def is_valid?
     self.is_set? and not $bot.user(@id).nil? and self.exists?
-  end
-
-  def resolve a
-    u = nil
-    case a
-    when /^\d+$/
-      u = $bot.user a
-    when /^.*#\d+$/
-      b = a.rpartition '#'
-      u = $bot.find_user b.first, b.last
-    else
-      false
-    end
-
-    self.set u unless u.nil?
-    not u.nil?
   end
 
   def update
@@ -178,12 +166,15 @@ $bot.command :challenge do |e, *args|
   if challenger.id == opponent.id
     challenger.pm "**Sorry!** You can't challenge yourself" 
     return
+  elsif opponent.id == $bot.profile.id
+    challenger.pm "**Sorry!** You can't challenge the bot"
+    return
   end
 
   gid = SecureRandom.uuid
   send_challenge = lambda do
-    challenger.pm "You have challenged **#{opponent}!**. Type **!cancel #{gid}** to cancel the challenge"
-    opponent.pm "You have been challenged by **#{challenger}!**. Type **!accept #{gid}** to accept the challenge"
+    challenger.pm "You have challenged **#{opponent}**!. Type **!cancel #{gid}** to cancel the challenge"
+    opponent.pm "You have been challenged by **#{challenger}**!. Type **!accept #{gid}** to accept the challenge"
   end
 
   # TODO: Check if challenger or opponent is already in a game
