@@ -129,6 +129,60 @@ class User
       puts "PM: #{msg}"
     end
   end
+
+  def hget sym
+    nil if not self.is_set? or not self.exists?
+    $db.hget self.dbid, sym
+  end
+
+  def hgetall
+    nil if not self.is_set? or not self.exists?
+    $db.hgetall self.dbid
+  end
+
+  def elo
+    self.hget :elo
+  end
+
+  def history
+    self.hget :history
+  end
+
+  def wins
+    self.hget :wins
+  end
+
+  def loses
+    self.hget :loses
+  end
+
+  def ties
+    self.hget :ties
+  end
+
+  def age
+    self.hget :age
+  end
+end
+
+# Taken from: https://stackoverflow.com/a/1679963
+class Numeric
+  def duration
+    secs  = self.to_int
+    mins  = secs / 60
+    hours = mins / 60
+    days  = hours / 24
+
+    if days > 0
+      "#{days} days and #{hours % 24} hours"
+    elsif hours > 0
+      "#{hours} hours and #{mins % 60} minutes"
+    elsif mins > 0
+      "#{mins} minutes and #{secs % 60} seconds"
+    elsif secs >= 0
+      "#{secs} seconds"
+    end
+  end
 end
 
 $mm_list = ThreadHash.new # Matchmaking list
@@ -148,7 +202,7 @@ $bot.command :register do |e|
   if $db.exists user 
     e.user.pm 'You already registered! Type **!help** for a list of commands'
   else
-    $db.hmset user, :elo, 1000, :history, "", :age, Time.now.getutc.to_i, :wins, 0, :loses, 0 
+    $db.hmset user, :elo, 1000, :history, "", :age, Time.now.getutc.to_i, :wins, 0, :loses, 0, :ties, 0
     e.user.pm 'You are now registered. Welcome! Type **!help** for a list of commands'
   end
 end
@@ -167,7 +221,7 @@ $bot.command :challenge do |e, *args|
     challenger.pm "**Sorry!** You can't challenge yourself" 
     return
   elsif opponent.id == $bot.profile.id
-    challenger.pm "**Sorry!** You can't challenge the bot"
+    challenger.pm "**Sorry!** You can't challenge the bot (yet)"
     return
   end
 
@@ -251,7 +305,7 @@ $bot.command :accept do |e, *args|
       # TODO: Start game here
       "Starting match between **#{challenger}** and **#{user}**! (ID: #{gid})"
     else
-      "**Sorry!** Can't find game '#{gid}'. It may have been declined or timed out"
+      "**Sorry!** Can't find game '**#{gid}**'. It may have been declined or timed out"
     end
   end
 end
@@ -272,7 +326,7 @@ $bot.command :decline do |e, *args|
       challenger.pm "**#{user}** has declined your challenge"
       remove_challenge user.id, gid
     else
-      "**Sorry!** Can't find game '#{gid}'. It may have already been declined or timed out"
+      "**Sorry!** Can't find game '**#{gid}**'. It may have already been declined or timed out"
     end
   end
 end
@@ -292,7 +346,7 @@ $bot.command :cancel do |e, *args|
     return
   else
     $pc_list.use do |h|
-      return "**Sorry!** Can't find game '#{gid}'. It may have already been declined or timed out" unless h.has_key? user.id
+      return "**Sorry!** Can't find game '**#{gid}**'. It may have already been declined or timed out" unless h.has_key? user.id
       y = h[user.id].detect do |x|
         x[:gid] == gid
       end
@@ -306,7 +360,7 @@ $bot.command :cancel do |e, *args|
         h.delete user.id if h[user.id].empty?
         return
       else
-        return "**Sorry!** Can't find game '#{gid}'. It may have already been declined or timed out"
+        return "**Sorry!** Can't find game '**#{gid}**'. It may have already been declined or timed out"
       end
     end
   end
@@ -317,10 +371,11 @@ $bot.command :elo do |e, *args|
   whereami e.user, "ELO"
   a = (args.empty? ? e.user.id.to_s : args.join(' '))
   user = User.new a
-  if user.is_valid?
-    "**#{user.to_s}** (#{user.id}) has **#{$db.hget(user.dbid, :elo)}** elo"
+  elo = user.elo
+  unless elo.nil? 
+    "**#{user.to_s}** (#{user.id}) has **#{elo}** elo"
   else
-    "**Sorry!** I can't find user **'#{a}'**"
+    "**Sorry!** I can't find user '**#{a}**'"
   end
 end
 
@@ -329,10 +384,26 @@ $bot.command :info do |e, *args|
   whereami e.user, "INFO"
   a = (args.empty? ? e.user.id.to_s : args.join(' '))
   user = User.new a
-  if user.is_valid?
-    "**#{user.to_s}** (#{user.id}) has **#{$db.hget(user.dbid, :elo)}** elo"
+  if user.is_valid? 
+    info = user.hgetall
+    e << "User summary for: **#{user}**:"
+    e << "```css"
+    e << "[ELO]:      #{info['elo']}"
+    # TODO: Print rank/position
+    e << "[RANK]:     N/A"
+    history = info['history']
+    history = "None" if history.nil? or history.empty?
+    e << "[HISTROY]:  #{history}"
+    e << "[WINS]:     #{info['wins']}"
+    e << "[LOSES]:    #{info['loses']}"
+    e << "[TIES]:     #{info['ties']}"
+    wins  = info['wins'].to_i
+    total = wins + info['loses'].to_i + info['ties'].to_i
+    e << "[WIN RATE]: #{total == 0 ? "N/A" : wins / total}"
+    e << "[AGE]:      #{(Time.now.getutc.to_i - info['age'].to_i).duration}"
+    e << "```"
   else
-    "**Sorry!** I can't find user **'#{a}'**"
+    "**Sorry!** I can't find user '**#{a}**'"
   end
 end
 
