@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
-%w(discordrb redis thread securerandom).each { |r| require r }
+%w(discordrb redis thread securerandom socket timeout).each do |r|
+  require r
+end
 
 Thread.abort_on_exception = true
 $stdout.sync = true
@@ -122,11 +124,11 @@ class User
 
   def pm msg
     return unless self.is_valid?
+    u = $bot.user @id
     begin
-      u = $bot.user @id
       u.pm msg
     rescue
-      puts "PM: #{msg}"
+      puts "PM (TO: #{u.username}##{u.discriminator}): #{msg}"
     end
   end
 
@@ -457,6 +459,15 @@ pc_list_timeout = Thread.new do
       end
     end
     sleep 60
+  end
+end
+
+# Thread to keep image server running
+img_server = Thread.new do
+  loop do
+    pid = Process.spawn './img_server'
+    Process.wait pid
+    sleep 5
   end
 end
 
