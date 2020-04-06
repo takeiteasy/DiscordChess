@@ -7,3 +7,4 @@ tests/*.token
 *.o
 test.png
 ffi_img_test
+*.dSYM/

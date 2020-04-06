@@ -5,7 +5,7 @@
 
 struct image_t {
 	int width, height, channels;
-  png_byte** rows;
+	png_byte** rows;
 };
 
 struct image_t* load_image(const char* path);
