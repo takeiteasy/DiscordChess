@@ -2,4 +2,8 @@ token
 *.rdb
 redis.conf
 a.out
-img_server
+tests/*.token
+*.dylib
+*.o
+test.png
+ffi_img_test

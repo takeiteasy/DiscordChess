@@ -467,6 +467,7 @@ img_server = Thread.new do
   loop do
     pid = Process.spawn './img_server'
     Process.wait pid
+    puts "[#{Time.now}] WARNING! Image server process ended! See logs"
     sleep 5
   end
 end
