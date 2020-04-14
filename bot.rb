@@ -1,7 +1,11 @@
 #!/usr/bin/env ruby
-%w(discordrb redis thread securerandom socket timeout).each do |r|
-  require r
-end
+require 'discordrb'
+require 'redis'
+require 'thread'
+require 'securerandom'
+require 'timeout'
+require 'ffi'
+require './ffi_img_lib'
 
 Thread.abort_on_exception = true
 $stdout.sync = true
@@ -11,6 +15,15 @@ puts "This bot's invite URL is #{$bot.invite_url}."
 puts 'Click on it to invite it to your server.'
 # TODO: Config parser for bot token and Redis information
 $db  = Redis.new
+
+# Load image assets to table
+$assets_map = 'PpRrNnBbQqKk'.freeze
+$assets = {'board' => Img.new }
+ImgLib.load_image $assets['board'], "assets/board.png"
+$assets_map.each_char do |c|
+  $assets[c] = Img.new
+  ImgLib.load_image $assets[c], "assets/#{c.ord < 97 ? 'white' : 'black'}_#{{'p' => 'pawn', 'r' => 'rook', 'n' => 'knight', 'b' => 'bishop', 'q' => 'queen', 'k' => 'king'}[c.downcase]}.png"
+end
 
 # Basic thread-safe hash wrapper
 class ThreadHash
@@ -131,6 +144,20 @@ class User
       puts "PM (TO: #{u.username}##{u.discriminator}): #{msg}"
     end
   end
+  
+  def send_file path, del=true
+    return unless self.is_valid?
+    u = $bot.user @id
+    begin
+      u.send_file File.open(path, 'r')
+    rescue Errno::ENOENT => e
+      abort "ERROR: FILE \"#{path}\" doesn't exist"
+    rescue
+      puts "SEND_FILE (TO: #{u.username}##{u.discriminator}): #{path}"
+    ensure
+      File.delete path if del
+    end
+  end
 
   def hget sym
     nil if not self.is_set? or not self.exists?
@@ -209,6 +236,57 @@ $bot.command :register do |e|
   end
 end
 
+def in_game? id
+  false
+end
+
+class Game
+  attr_accessor :gid, :white, :black, :pgn, :fen, :age
+  
+  def initialize gid, white, black
+    @gid = gid
+    @white = User.new white
+    @black = User.new black
+    @pgn = []
+    @fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    @age = Time.now.getutc.to_i
+    
+    @white.pm "You are **WHITE**, your move"
+    @white.send_file self.generate_board
+    @black.pm "You are **BLACK**, waiting for white to move"
+  end
+  
+  def game_error
+  end
+  
+  def generate_board
+    segs = @fen.split(' ')
+    board = segs[0].split('/')
+    
+    board_img = Img.new
+    self.game_error unless ImgLib.copy_image $assets['board'], board_img
+    
+    board.each_with_index do |r, i|
+      r.split('').each_with_index do |c, j|
+        
+      end
+    end
+    
+    path = "/tmp/#{SecureRandom.uuid}.png"
+    self.game_error unless ImgLib.save_image board_img, path
+    return path
+  end
+end
+
+def start_game gid, cid, uid
+  white = cid
+  black = uid
+  white, black = black, white if rand(1..100) < 50
+  
+  game = Game.new gid, white, black
+  $ag_list.push gid, game
+end
+
 # Challenge another player
 $bot.command :challenge do |e, *args|
   whereami e.user, "CHALLENGE"
@@ -224,6 +302,12 @@ $bot.command :challenge do |e, *args|
     return
   elsif opponent.id == $bot.profile.id
     challenger.pm "**Sorry!** You can't challenge the bot (yet)"
+    return
+  elsif in_game? opponent.id
+    challenger.pm "**Sorry!** That play is already playing a game"
+    return
+  elsif in_game? challenger.id
+    challenger.pm "**Sorry!** You already playing a game"
     return
   end
 
@@ -277,7 +361,6 @@ def find_challenge uid, gid
   nil
 end
 
-
 def remove_challenge uid, gid
   $pc_list.use do |h|
     h.each do |k, v|
@@ -304,7 +387,7 @@ $bot.command :accept do |e, *args|
       user.pm "You have accepted **#{challenger}**'s challenge! Game is beginning!"
       challenger.pm "**#{user}** has accepted your challenge! Game is beginning!"
       remove_challenge user.id, gid
-      # TODO: Start game here
+      start_game gid, challenger.id, user.id
       "Starting match between **#{challenger}** and **#{user}**! (ID: #{gid})"
     else
       "**Sorry!** Can't find game '**#{gid}**'. It may have been declined or timed out"
@@ -459,16 +542,6 @@ pc_list_timeout = Thread.new do
       end
     end
     sleep 60
-  end
-end
-
-# Thread to keep image server running
-img_server = Thread.new do
-  loop do
-    pid = Process.spawn './img_server'
-    Process.wait pid
-    puts "[#{Time.now}] WARNING! Image server process ended! See logs"
-    sleep 5
   end
 end
 
