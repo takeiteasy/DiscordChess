@@ -294,8 +294,12 @@ $bot.command :challenge do |e, *args|
   "**Sorry!** You aren't registered. Type **!register** to begin" unless challenger.is_valid?
 
   a = args.join(' ')
-  opponent = User.new a 
-  "**Sorry!** I can't find user **'#{a}'**" unless opponent.is_valid?
+  opponent = begin
+               User.new a
+             rescue
+               nil
+             end
+  return "**Sorry!** I can't find user **'#{a}'**" if opponent.nil? or not opponent.is_valid?
 
   if challenger.id == opponent.id
     challenger.pm "**Sorry!** You can't challenge yourself" 

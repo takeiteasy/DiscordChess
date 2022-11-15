@@ -12,7 +12,7 @@ $(TARGET).o: tests/$(TARGET).c
 	$(CC) -c $< -o $@
 
 $(LIB).dylib: $(LIB).o
-	clang -shared -fpic -o $@ $^ $(DEPS)
+	$(CC) -shared -fpic -o $@ $^ $(DEPS)
 
 $(LIB).o: $(LIB).c $(LIB).h
 	$(CC) -c -o $@ $<
